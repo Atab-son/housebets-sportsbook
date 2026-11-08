@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Housebets Sportsbook — Interactive Prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+            colors: {
+              hb: {
+                bg: '#0B0E14',
+                panel: '#121721',
+                card: '#181F2C',
+                cardHover: '#1F293A',
+                odd: '#232D3F',
+                oddHover: '#2C384E',
+                border: '#222B3A',
+                green: '#00E701',
+                greenGlow: 'rgba(0, 231, 1, 0.25)',
+                muted: '#64748B',
+                secondary: '#94A3B8',
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #0B0E14;
+        color: #F8FAFC;
+        font-family: 'Inter', sans-serif;
+        overflow-x: hidden;
+      }
+      .tabular-nums {
+        font-variant-numeric: tabular-nums;
+      }
+      /* Custom thin scrollbars for sportsbook panels */
+      ::-webkit-scrollbar {
+        width: 5px;
+        height: 5px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0B0E14;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #222B3A;
+        border-radius: 9999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #334155;
+      }
+      @keyframes pulseGreen {
+        0%, 100% { background-color: rgba(16, 185, 129, 0.28); border-color: rgba(16, 185, 129, 0.7); }
+        50% { background-color: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3); }
+      }
+      @keyframes pulseRed {
+        0%, 100% { background-color: rgba(239, 68, 68, 0.28); border-color: rgba(239, 68, 68, 0.7); }
+        50% { background-color: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); }
+      }
+      .odd-flash-up {
+        animation: pulseGreen 1.4s ease-in-out;
+      }
+      .odd-flash-down {
+        animation: pulseRed 1.4s ease-in-out;
+      }
+    </style>
+  </head>
+  <body class="bg-[#0B0E14] text-slate-100 antialiased selection:bg-[#00E701] selection:text-[#0B0E14]">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
