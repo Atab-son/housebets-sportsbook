@@ -21,7 +21,7 @@ import {
   Sparkles,
   Shield,
   Activity,
-  RotateCcw
+  RotateCcw,
 } from 'lucide-react';
 import {
   INITIAL_MATCHES,
@@ -40,7 +40,6 @@ type ActivePage = 'home' | 'live' | 'football' | 'match' | 'betslip-mobile';
 type SlipTab = 'slip' | 'mybets';
 type MyBetsFilter = 'open' | 'settled' | 'cashout';
 
-// Clean Broadcast-Grade Custom SVG Club Crest Component
 const TeamCrest: React.FC<{ name: string; colors: [string, string]; size?: 'sm' | 'md' | 'lg' }> = ({
   name,
   colors,
@@ -52,7 +51,8 @@ const TeamCrest: React.FC<{ name: string; colors: [string, string]; size?: 'sm' 
     .join('')
     .slice(0, 3)
     .toUpperCase();
-  const dimensions = size === 'lg' ? 'w-11 h-11 text-xs' : size === 'md' ? 'w-7 h-7 text-[10px]' : 'w-5 h-5 text-[8px]';
+  const dimensions =
+    size === 'lg' ? 'w-11 h-11 text-xs' : size === 'md' ? 'w-7 h-7 text-[10px]' : 'w-5 h-5 text-[8px]';
 
   return (
     <div
@@ -72,13 +72,16 @@ const TeamCrest: React.FC<{ name: string; colors: [string, string]; size?: 'sm' 
 export default function App() {
   // Navigation & Responsive Drawer State
   const [activePage, setActivePage] = useState<ActivePage>('home');
+  const [activeMatchId, setActiveMatchId] = useState<string>('m-ars-bha');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSlipOpen, setMobileSlipOpen] = useState(false);
+  const [simulatorExpandedMobile, setSimulatorExpandedMobile] = useState(false);
 
   // Data & Wallet State
   const [walletBalance, setWalletBalance] = useState<number>(1450.0);
   const [matches, setMatches] = useState<MatchFixture[]>(INITIAL_MATCHES);
   const [matchMarkets, setMatchMarkets] = useState<MarketGroupItem[]>(ARSENAL_BRIGHTON_MARKETS);
+  const [collapsedMarkets, setCollapsedMarkets] = useState<string[]>([]);
   const [myBets, setMyBets] = useState<PlacedBet[]>(INITIAL_MY_BETS);
 
   // Filters & Search
@@ -87,16 +90,22 @@ export default function App() {
   const [selectedSport, setSelectedSport] = useState<string>('all');
   const [selectedCompetition, setSelectedCompetition] = useState<string>('all');
   const [matchMarketTab, setMatchMarketTab] = useState<string>('All Markets');
-  const [followedItems, setFollowedItems] = useState<string[]>(['Premier League', 'Arsenal', 'Champions League']);
+  const [followedItems, setFollowedItems] = useState<string[]>([
+    'Premier League',
+    'Arsenal',
+    'Champions League',
+  ]);
   const [showFollowedOnly, setShowFollowedOnly] = useState(false);
 
   // Live Clock Ticker for Arsenal v Brighton (64:18+)
   const [matchSeconds, setMatchSeconds] = useState<number>(64 * 60 + 18);
 
-  // Bet Slip & Edge State Controls (30 PTS Total: 20 pts Bet Slip + 10 pts Edge States)
+  // Bet Slip & Edge State Controls
   const [slipTab, setSlipTab] = useState<SlipTab>('slip');
   const [myBetsFilter, setMyBetsFilter] = useState<MyBetsFilter>('open');
-  const [selectedOdd, setSelectedOdd] = useState<OddOption | null>(INITIAL_MATCHES[0].markets1X2.home);
+  const [selectedOdd, setSelectedOdd] = useState<OddOption | null>(
+    INITIAL_MATCHES[0].markets1X2.home
+  );
   const [stake, setStake] = useState<string>('25');
 
   // Judge's Edge-State Simulator Toggles
@@ -115,6 +124,11 @@ export default function App() {
   const [betFailedError, setBetFailedError] = useState<string | null>(null);
   const [cashingOutId, setCashingOutId] = useState<string | null>(null);
 
+  const currentMatch = useMemo(
+    () => matches.find((m) => m.id === activeMatchId) || matches[0],
+    [matches, activeMatchId]
+  );
+
   // 1. Live Match Clock Second Ticker
   useEffect(() => {
     const timer = setInterval(() => {
@@ -129,10 +143,9 @@ export default function App() {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   }, [matchSeconds]);
 
-  // 2. Background Live Odds Volatility Ticker (Every 6 seconds)
+  // 2. Background Live Odds & Cash-Out Volatility Ticker (Every 6 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
-      // Randomly nudge 1 live match odd and 1 Arsenal v Brighton market odd
       setMatches((prevMatches) =>
         prevMatches.map((m, idx) => {
           if (!m.isLive || idx > 2) return m;
@@ -175,6 +188,16 @@ export default function App() {
           };
         })
       );
+
+      // Subtly tick open Cash Out offers in My Bets
+      setMyBets((prevBets) =>
+        prevBets.map((bet) => {
+          if (bet.status !== 'open' || !bet.cashOutValue) return bet;
+          const nudge = Math.random() > 0.48 ? 0.35 : -0.3;
+          const updatedCashOut = Number(Math.max(bet.stake * 0.4, bet.cashOutValue + nudge).toFixed(2));
+          return { ...bet, cashOutValue: updatedCashOut };
+        })
+      );
     }, 6000);
 
     return () => clearInterval(interval);
@@ -186,6 +209,19 @@ export default function App() {
     setFollowedItems((prev) =>
       prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name]
     );
+  };
+
+  // Toggle Market Accordion Collapse
+  const toggleMarketCollapse = (marketId: string) => {
+    setCollapsedMarkets((prev) =>
+      prev.includes(marketId) ? prev.filter((id) => id !== marketId) : [...prev, marketId]
+    );
+  };
+
+  // Open specific match on Match Page
+  const openMatchPage = (matchId: string) => {
+    setActiveMatchId(matchId);
+    setActivePage('match');
   };
 
   // Select Odd Handler
@@ -231,7 +267,6 @@ export default function App() {
       direction: newPrice > oldPrice ? 'up' : 'down',
     });
 
-    // Also flash the Match Page markets
     setMatchMarkets((prev) =>
       prev.map((g) => ({
         ...g,
@@ -268,12 +303,10 @@ export default function App() {
     );
   };
 
-  // Accept Changed Odds
   const handleAcceptNewOdds = () => {
     setOddsChangedState((prev) => ({ ...prev, active: false }));
   };
 
-  // Place Single Bet Handler
   const handlePlaceBet = () => {
     if (!selectedOdd || selectionSuspended || oddsChangedState.active) return;
     const numericStake = parseFloat(stake) || 0;
@@ -308,7 +341,10 @@ export default function App() {
         matchTitle: selectedOdd.matchTitle,
         league: selectedOdd.league,
         isLive: true,
-        matchScore: selectedOdd.matchId === 'm-ars-bha' ? `2 - 1 (${Math.floor(matchSeconds / 60)}')` : 'Live',
+        matchScore:
+          selectedOdd.matchId === 'm-ars-bha'
+            ? `2 - 1 (${Math.floor(matchSeconds / 60)}')`
+            : 'Live',
         odds: selectedOdd.odds,
         stake: numericStake,
         potentialReturn,
@@ -323,20 +359,38 @@ export default function App() {
     }, 550);
   };
 
-  // Interactive Cash Out Handler
   const handleCashOut = (bet: PlacedBet) => {
     if (!bet.cashOutValue) return;
     setCashingOutId(bet.id);
     setTimeout(() => {
       setWalletBalance((prev) => Number((prev + (bet.cashOutValue || 0)).toFixed(2)));
       setMyBets((prev) =>
-        prev.map((item) =>
-          item.id === bet.id ? { ...item, status: 'cashed_out' } : item
-        )
+        prev.map((item) => (item.id === bet.id ? { ...item, status: 'cashed_out' } : item))
       );
       setCashingOutId(null);
     }, 450);
   };
+
+  // Adapt Match Page markets dynamically if user clicked another fixture
+  const displayedMatchMarkets = useMemo(() => {
+    if (currentMatch.id === 'm-ars-bha') return matchMarkets;
+    return matchMarkets.map((group) => ({
+      ...group,
+      title: group.title
+        .replace('Arsenal', currentMatch.homeTeam)
+        .replace('Brighton', currentMatch.awayTeam),
+      options: group.options.map((opt) => ({
+        ...opt,
+        id: `${currentMatch.id}-${opt.id}`,
+        matchId: currentMatch.id,
+        matchTitle: `${currentMatch.homeTeam} v ${currentMatch.awayTeam}`,
+        league: currentMatch.competitionName,
+        label: opt.label
+          .replace('Arsenal', currentMatch.homeTeam)
+          .replace('Brighton', currentMatch.awayTeam),
+      })),
+    }));
+  }, [matchMarkets, currentMatch]);
 
   // Search Results Calculation
   const searchResults = useMemo(() => {
@@ -353,23 +407,24 @@ export default function App() {
       .map((m) => ({
         type: m.isLive ? 'Live Match' : 'Fixture',
         name: `${m.homeTeam} v ${m.awayTeam}`,
-        detail: `${m.competitionName} • ${m.isLive ? `${m.homeScore}-${m.awayScore} (${m.minute}')` : m.kickoff}`,
+        detail: `${m.competitionName} • ${
+          m.isLive ? `${m.homeScore}-${m.awayScore} (${m.minute}')` : m.kickoff
+        }`,
         action: () => {
-          setActivePage('match');
+          openMatchPage(m.id);
           setSearchQuery('');
           setSearchFocused(false);
         },
       }));
 
     const matchedExtras = SEARCHABLE_PLAYERS_AND_MARKETS.filter(
-      (item) =>
-        item.name.toLowerCase().includes(q) || item.detail.toLowerCase().includes(q)
+      (item) => item.name.toLowerCase().includes(q) || item.detail.toLowerCase().includes(q)
     ).map((item) => ({
       type: item.type,
       name: item.name,
       detail: item.detail,
       action: () => {
-        setActivePage('match');
+        openMatchPage('m-ars-bha');
         if (item.name.toLowerCase().includes('corner')) setMatchMarketTab('Corners & cards');
         else if (item.name.toLowerCase().includes('handicap')) setMatchMarketTab('Handicaps');
         else if (item.type === 'Player') setMatchMarketTab('Goalscorers');
@@ -381,7 +436,6 @@ export default function App() {
     return [...matchedMatches, ...matchedExtras].slice(0, 7);
   }, [searchQuery, matches]);
 
-  // Derived Match Lists
   const liveMatches = useMemo(() => {
     if (forceNothingLive) return [];
     return matches.filter((m) => {
@@ -392,9 +446,7 @@ export default function App() {
     });
   }, [matches, forceNothingLive, selectedSport, selectedCompetition]);
 
-  const startingSoonMatches = useMemo(() => {
-    return matches.filter((m) => !m.isLive);
-  }, [matches]);
+  const startingSoonMatches = useMemo(() => matches.filter((m) => !m.isLive), [matches]);
 
   const openBetsCount = useMemo(
     () => myBets.filter((b) => b.status === 'open').length,
@@ -456,7 +508,7 @@ export default function App() {
     );
   };
 
-  // Reusable Match Row Card (Used across Sports Home, Live, Football)
+  // Reusable Match Row Card
   const renderMatchRow = (match: MatchFixture) => {
     const isHomeFollowed = followedItems.includes(match.homeTeam);
     const isAwayFollowed = followedItems.includes(match.awayTeam);
@@ -464,12 +516,10 @@ export default function App() {
     return (
       <div
         key={match.id}
-        onClick={() => setActivePage('match')}
+        onClick={() => openMatchPage(match.id)}
         className="group bg-[#181F2C] hover:bg-[#1F293A] border border-[#222B3A] rounded-xl p-3 sm:p-3.5 transition-all cursor-pointer flex flex-col lg:flex-row lg:items-center justify-between gap-3"
       >
-        {/* Left: Status, Clock & Teams */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          {/* Time / Live Pillar */}
           <div className="w-14 sm:w-16 shrink-0 flex flex-col items-center justify-center border-r border-[#263042] pr-2.5">
             {match.isLive ? (
               <>
@@ -488,9 +538,7 @@ export default function App() {
             )}
           </div>
 
-          {/* Teams & Live Scores */}
           <div className="flex-1 min-w-0 space-y-1.5">
-            {/* Home Team */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <TeamCrest name={match.homeTeam} colors={match.homeColors} />
@@ -516,7 +564,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Away Team */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <TeamCrest name={match.awayTeam} colors={match.awayColors} />
@@ -544,7 +591,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: 1X2 Match Result Odds */}
         <div className="grid grid-cols-3 gap-2 w-full lg:w-[270px] shrink-0">
           {renderOddButton(match.markets1X2.home, true)}
           {match.markets1X2.draw ? (
@@ -560,23 +606,21 @@ export default function App() {
     );
   };
 
-  // UNIFIED PAGE 5: BET SLIP + MY BETS COMPONENT (Shared between Right Panel & Mobile Drawer)
+  // UNIFIED PAGE 5: BET SLIP + MY BETS COMPONENT
   const renderUnifiedBetSlipAndMyBets = () => {
     const numericStake = parseFloat(stake) || 0;
-    const potentialReturn = selectedOdd
-      ? (numericStake * selectedOdd.odds).toFixed(2)
-      : '0.00';
+    const potentialReturn = selectedOdd ? (numericStake * selectedOdd.odds).toFixed(2) : '0.00';
 
     const filteredMyBets = myBets.filter((b) => {
       if (myBetsFilter === 'open') return b.status === 'open';
-      if (myBetsFilter === 'settled') return b.status === 'won' || b.status === 'lost' || b.status === 'cashed_out';
+      if (myBetsFilter === 'settled')
+        return b.status === 'won' || b.status === 'lost' || b.status === 'cashed_out';
       if (myBetsFilter === 'cashout') return b.status === 'open' && b.cashOutValue;
       return true;
     });
 
     return (
       <div className="flex flex-col h-full bg-[#121721] text-slate-100 select-none">
-        {/* Segmented Header Switch: Bet Slip | My Bets */}
         <div className="p-3 border-b border-[#222B3A] bg-[#0F141D]">
           <div className="grid grid-cols-2 gap-1 bg-[#181F2C] p-1 rounded-xl border border-[#222B3A]">
             <button
@@ -610,7 +654,9 @@ export default function App() {
               <span>My Bets</span>
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                  slipTab === 'mybets' ? 'bg-[#0B0E14] text-[#00E701]' : 'bg-[#232D3F] text-[#00E701]'
+                  slipTab === 'mybets'
+                    ? 'bg-[#0B0E14] text-[#00E701]'
+                    : 'bg-[#232D3F] text-[#00E701]'
                 }`}
               >
                 {openBetsCount}
@@ -619,10 +665,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* TAB 1: BET SLIP */}
         {slipTab === 'slip' ? (
           <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
-            {/* Singles Only Mode Pill */}
             <div className="flex items-center justify-between text-[11px] text-slate-400 bg-[#181F2C] px-3 py-1.5 rounded-lg border border-[#222B3A]">
               <span className="font-semibold text-slate-200 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#00E701]" />
@@ -631,9 +675,8 @@ export default function App() {
               <span className="font-mono text-slate-400">Currency: USDT</span>
             </div>
 
-            {/* Bet Placed Success Receipt State */}
             {betPlacedSuccess && (
-              <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 space-y-3 animate-fadeIn">
+              <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
                     <CheckCircle2 className="w-5 h-5 shrink-0" />
@@ -655,7 +698,9 @@ export default function App() {
                     {betPlacedSuccess.marketName} • {betPlacedSuccess.matchTitle}
                   </div>
                   <div className="pt-2 border-t border-[#222B3A] flex justify-between font-mono text-xs tabular-nums">
-                    <span className="text-slate-400">Stake: {betPlacedSuccess.stake.toFixed(2)} USDT</span>
+                    <span className="text-slate-400">
+                      Stake: {betPlacedSuccess.stake.toFixed(2)} USDT
+                    </span>
                     <span className="text-emerald-400 font-bold">
                       Return: {betPlacedSuccess.potentialReturn.toFixed(2)} USDT
                     </span>
@@ -683,7 +728,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Active Selection Card */}
             {!selectedOdd ? (
               <div className="py-12 px-4 text-center border border-dashed border-[#263042] rounded-xl space-y-2">
                 <Receipt className="w-8 h-8 text-slate-600 mx-auto" />
@@ -702,7 +746,6 @@ export default function App() {
                     : 'bg-[#181F2C] border-[#263042]'
                 }`}
               >
-                {/* Selection Header */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
@@ -750,12 +793,14 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* EDGE STATE 1: ODDS CHANGED WARNING BANNER */}
                 {oddsChangedState.active && !selectionSuspended && (
                   <div className="bg-amber-500/15 border border-amber-500/40 rounded-lg p-2.5 flex items-start gap-2 text-xs text-amber-300">
                     <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-bold block">Odds changed from {oddsChangedState.oldOdds.toFixed(2)} to {oddsChangedState.newOdds.toFixed(2)}</span>
+                      <span className="font-bold block">
+                        Odds changed from {oddsChangedState.oldOdds.toFixed(2)} to{' '}
+                        {oddsChangedState.newOdds.toFixed(2)}
+                      </span>
                       <span className="text-[11px] text-amber-200/80">
                         You must accept the updated price before placing your bet.
                       </span>
@@ -763,7 +808,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* EDGE STATE 2: SELECTION SUSPENDED BANNER */}
                 {selectionSuspended && (
                   <div className="bg-rose-500/15 border border-rose-500/40 rounded-lg p-2.5 flex items-center gap-2 text-xs text-rose-300">
                     <Lock className="w-4 h-4 text-rose-400 shrink-0" />
@@ -771,8 +815,17 @@ export default function App() {
                   </div>
                 )}
 
-                {/* USDT Stake Input */}
+                {/* USDT Stake Input + Additive Quick Chips + MAX */}
                 <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>Stake Amount</span>
+                    <button
+                      onClick={() => setStake('0')}
+                      className="text-slate-500 hover:text-slate-300 font-mono text-[10px]"
+                    >
+                      Clear
+                    </button>
+                  </div>
                   <div className="relative flex items-center">
                     <input
                       type="number"
@@ -792,14 +845,14 @@ export default function App() {
                     </span>
                   </div>
 
-                  {/* Quick Stake Pills */}
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-5 gap-1.5">
                     {[10, 25, 50, 100].map((amt) => (
                       <button
                         key={amt}
                         disabled={selectionSuspended}
                         onClick={() => {
-                          setStake(String(amt));
+                          const current = parseFloat(stake) || 0;
+                          setStake(String(current + amt));
                           setBetFailedError(null);
                         }}
                         className="py-1.5 rounded bg-[#232D3F] hover:bg-[#2C384E] text-xs font-mono font-semibold text-slate-200 border border-[#2E3A52] transition disabled:opacity-40"
@@ -807,10 +860,19 @@ export default function App() {
                         +{amt}
                       </button>
                     ))}
+                    <button
+                      disabled={selectionSuspended}
+                      onClick={() => {
+                        setStake(String(Math.floor(walletBalance)));
+                        setBetFailedError(null);
+                      }}
+                      className="py-1.5 rounded bg-[#182625] hover:bg-[#1F3532] text-xs font-mono font-bold text-[#00E701] border border-[#00E701]/30 transition disabled:opacity-40"
+                    >
+                      MAX
+                    </button>
                   </div>
                 </div>
 
-                {/* Stake / Odds / Potential Return Summary */}
                 <div className="pt-2 border-t border-[#222B3A] space-y-1 text-xs">
                   <div className="flex justify-between text-slate-400">
                     <span>Stake</span>
@@ -828,7 +890,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* EDGE STATE 4: BET FAILED REJECTION BANNER */}
                 {betFailedError && (
                   <div className="bg-rose-950/60 border border-rose-500/50 rounded-lg p-2.5 flex items-start gap-2 text-xs text-rose-200">
                     <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
@@ -838,7 +899,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Primary Action CTA Button */}
                 {selectionSuspended ? (
                   <button
                     disabled
@@ -875,9 +935,7 @@ export default function App() {
             )}
           </div>
         ) : (
-          /* TAB 2: MY BETS (Open, Settled, Cash Out) */
           <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
-            {/* Sub-filter pills */}
             <div className="grid grid-cols-3 gap-1.5 bg-[#181F2C] p-1 rounded-lg border border-[#222B3A]">
               {(['open', 'settled', 'cashout'] as MyBetsFilter[]).map((tab) => (
                 <button
@@ -894,7 +952,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* Bet Tickets List */}
             {filteredMyBets.length === 0 ? (
               <div className="py-10 text-center text-xs text-slate-500">
                 No bets in this category right now.
@@ -943,7 +1000,9 @@ export default function App() {
                   <div className="pt-2 border-t border-[#222B3A] grid grid-cols-2 gap-2 text-xs font-mono tabular-nums">
                     <div>
                       <span className="text-slate-500 block text-[10px]">STAKE</span>
-                      <span className="text-slate-200 font-semibold">{bet.stake.toFixed(2)} USDT</span>
+                      <span className="text-slate-200 font-semibold">
+                        {bet.stake.toFixed(2)} USDT
+                      </span>
                     </div>
                     <div className="text-right">
                       <span className="text-slate-500 block text-[10px]">
@@ -959,14 +1018,16 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Interactive Cash Out Button for Open Bets */}
                   {bet.status === 'open' && bet.cashOutValue && (
                     <button
                       onClick={() => handleCashOut(bet)}
                       disabled={cashingOutId === bet.id}
                       className="w-full py-2 px-3 rounded-lg bg-[#232D3F] hover:bg-[#00E701] hover:text-[#0B0E14] text-[#00E701] border border-[#00E701]/40 font-mono text-xs font-bold transition flex items-center justify-between tabular-nums"
                     >
-                      <span>{cashingOutId === bet.id ? 'Processing Cash Out...' : 'Cash Out Now'}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#00E701] animate-pulse" />
+                        {cashingOutId === bet.id ? 'Processing Cash Out...' : 'Cash Out Live'}
+                      </span>
                       <span>{bet.cashOutValue.toFixed(2)} USDT</span>
                     </button>
                   )}
@@ -981,71 +1042,83 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0B0E14] text-slate-100">
-      {/* JUDGE'S INTERACTIVE EDGE-STATE SIMULATOR BAR (10 PTS EDGE STATES) */}
-      <div className="bg-[#141B29] border-b border-[#263248] px-3 py-1.5 text-xs flex flex-wrap items-center justify-between gap-2 z-40">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#00E701]/15 text-[#00E701] font-mono text-[11px] font-bold">
-            <SlidersHorizontal className="w-3 h-3" />
-            STATE CONTROLS
-          </span>
-          <span className="text-slate-400 hidden sm:inline text-[11px]">
-            Test every required scorecard edge state instantly:
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            onClick={triggerOddsChange}
-            className={`px-2.5 py-1 rounded-md font-medium text-[11px] border transition ${
-              oddsChangedState.active
-                ? 'bg-amber-500 text-[#0B0E14] border-amber-400 font-bold'
-                : 'bg-[#1D2638] hover:bg-[#27324A] text-amber-300 border-amber-500/30'
-            }`}
-          >
-            1. Trigger Odds Change
-          </button>
+      {/* JUDGE'S INTERACTIVE EDGE-STATE SIMULATOR BAR (Collapsible on 390px Mobile) */}
+      <div className="bg-[#141B29] border-b border-[#263248] px-3 py-1.5 text-xs z-40">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#00E701]/15 text-[#00E701] font-mono text-[11px] font-bold">
+              <SlidersHorizontal className="w-3 h-3" />
+              STATE CONTROLS
+            </span>
+            <span className="text-slate-400 hidden md:inline text-[11px]">
+              Test every required scorecard edge state instantly:
+            </span>
+          </div>
 
           <button
-            onClick={toggleMarketSuspension}
-            className={`px-2.5 py-1 rounded-md font-medium text-[11px] border transition ${
-              selectionSuspended
-                ? 'bg-rose-500 text-white border-rose-400 font-bold'
-                : 'bg-[#1D2638] hover:bg-[#27324A] text-rose-300 border-rose-500/30'
-            }`}
+            onClick={() => setSimulatorExpandedMobile(!simulatorExpandedMobile)}
+            className="sm:hidden px-2 py-0.5 rounded bg-[#1D2638] text-slate-300 font-mono text-[10px] border border-[#2E3A52]"
           >
-            2. {selectionSuspended ? 'Unsuspend Markets' : 'Suspend Market'}
+            {simulatorExpandedMobile ? 'Hide Controls' : 'Test Edge States (4)'}
           </button>
 
-          <button
-            onClick={() => setSimulateBetFail((prev) => !prev)}
-            className={`px-2.5 py-1 rounded-md font-medium text-[11px] border transition ${
-              simulateBetFail
-                ? 'bg-rose-600 text-white border-rose-400 font-bold'
-                : 'bg-[#1D2638] hover:bg-[#27324A] text-slate-300 border-slate-600'
-            }`}
+          <div
+            className={`${
+              simulatorExpandedMobile ? 'flex' : 'hidden'
+            } sm:flex flex-wrap items-center gap-1.5 mt-2 sm:mt-0 w-full sm:w-auto`}
           >
-            3. Simulate Bet Failed: {simulateBetFail ? 'ON' : 'OFF'}
-          </button>
+            <button
+              onClick={triggerOddsChange}
+              className={`px-2.5 py-1 rounded-md font-medium text-[11px] border transition ${
+                oddsChangedState.active
+                  ? 'bg-amber-500 text-[#0B0E14] border-amber-400 font-bold'
+                  : 'bg-[#1D2638] hover:bg-[#27324A] text-amber-300 border-amber-500/30'
+              }`}
+            >
+              1. Trigger Odds Change
+            </button>
 
-          <button
-            onClick={() => {
-              setForceNothingLive((prev) => !prev);
-              setActivePage('live');
-            }}
-            className={`px-2.5 py-1 rounded-md font-medium text-[11px] border transition ${
-              forceNothingLive
-                ? 'bg-cyan-400 text-[#0B0E14] border-cyan-300 font-bold'
-                : 'bg-[#1D2638] hover:bg-[#27324A] text-cyan-300 border-cyan-500/30'
-            }`}
-          >
-            4. "Nothing Live" Fallback: {forceNothingLive ? 'ON' : 'OFF'}
-          </button>
+            <button
+              onClick={toggleMarketSuspension}
+              className={`px-2.5 py-1 rounded-md font-medium text-[11px] border transition ${
+                selectionSuspended
+                  ? 'bg-rose-500 text-white border-rose-400 font-bold'
+                  : 'bg-[#1D2638] hover:bg-[#27324A] text-rose-300 border-rose-500/30'
+              }`}
+            >
+              2. {selectionSuspended ? 'Unsuspend Markets' : 'Suspend Market'}
+            </button>
+
+            <button
+              onClick={() => setSimulateBetFail((prev) => !prev)}
+              className={`px-2.5 py-1 rounded-md font-medium text-[11px] border transition ${
+                simulateBetFail
+                  ? 'bg-rose-600 text-white border-rose-400 font-bold'
+                  : 'bg-[#1D2638] hover:bg-[#27324A] text-slate-300 border-slate-600'
+              }`}
+            >
+              3. Simulate Bet Failed: {simulateBetFail ? 'ON' : 'OFF'}
+            </button>
+
+            <button
+              onClick={() => {
+                setForceNothingLive((prev) => !prev);
+                setActivePage('live');
+              }}
+              className={`px-2.5 py-1 rounded-md font-medium text-[11px] border transition ${
+                forceNothingLive
+                  ? 'bg-cyan-400 text-[#0B0E14] border-cyan-300 font-bold'
+                  : 'bg-[#1D2638] hover:bg-[#27324A] text-cyan-300 border-cyan-500/30'
+              }`}
+            >
+              4. "Nothing Live" Fallback: {forceNothingLive ? 'ON' : 'OFF'}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* TOP BAR SHELL */}
       <header className="sticky top-0 z-30 h-16 bg-[#121721]/95 backdrop-blur-md border-b border-[#222B3A] px-3 sm:px-6 flex items-center justify-between gap-3">
-        {/* Left: Brand & Main Nav */}
         <div className="flex items-center gap-4 lg:gap-7">
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -1054,7 +1127,6 @@ export default function App() {
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
 
-          {/* Housebets Brand Mark */}
           <div
             onClick={() => setActivePage('home')}
             className="flex items-center gap-2.5 cursor-pointer group"
@@ -1074,7 +1146,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Primary Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-1">
             {[
               { id: 'home', label: 'Sports Home' },
@@ -1084,7 +1155,10 @@ export default function App() {
             ].map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActivePage(item.id as ActivePage)}
+                onClick={() => {
+                  if (item.id === 'match') setActiveMatchId('m-ars-bha');
+                  setActivePage(item.id as ActivePage);
+                }}
                 className={`px-3.5 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
                   activePage === item.id
                     ? 'bg-[#181F2C] text-[#00E701] border border-[#263248]'
@@ -1102,9 +1176,7 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Center/Right: Global Search & USDT Wallet */}
         <div className="flex items-center gap-2.5 flex-1 max-w-md justify-end">
-          {/* Global Instant Search (Teams, Players, Competitions, Markets) */}
           <div className="relative flex-1 max-w-xs">
             <div className="relative flex items-center">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
@@ -1127,7 +1199,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Instant Search Results Dropdown */}
             {searchFocused && searchQuery.trim().length > 0 && (
               <div className="absolute left-0 right-0 mt-2 bg-[#181F2C] border border-[#2E3A52] rounded-xl shadow-2xl overflow-hidden z-50">
                 <div className="px-3 py-1.5 bg-[#121721] text-[10px] font-mono uppercase text-slate-400 border-b border-[#222B3A]">
@@ -1158,7 +1229,6 @@ export default function App() {
             )}
           </div>
 
-          {/* USDT Crypto Balance Pill */}
           <div className="flex items-center gap-2 bg-[#181F2C] border border-[#263042] px-3 py-1.5 rounded-xl shrink-0">
             <Wallet className="w-4 h-4 text-[#00E701]" />
             <div className="text-right font-mono tabular-nums">
@@ -1185,7 +1255,10 @@ export default function App() {
         ].map((t) => (
           <button
             key={t.id}
-            onClick={() => setActivePage(t.id as ActivePage)}
+            onClick={() => {
+              if (t.id === 'match') setActiveMatchId('m-ars-bha');
+              setActivePage(t.id as ActivePage);
+            }}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
               activePage === t.id
                 ? 'bg-[#00E701] text-[#0B0E14]'
@@ -1197,15 +1270,13 @@ export default function App() {
         ))}
       </div>
 
-      {/* 3-COLUMN SITE SHELL: LEFT NAV + CENTER VIEWPORT + RIGHT PANEL */}
+      {/* 3-COLUMN SITE SHELL */}
       <div className="flex-1 flex max-w-[1440px] w-full mx-auto relative">
-        {/* COLUMN 1: LEFT NAVIGATION (240px Fixed on Desktop, Drawer on Mobile) */}
         <aside
           className={`${
             mobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 w-64 block' : 'hidden'
           } lg:block lg:w-[240px] shrink-0 bg-[#121721] border-r border-[#222B3A] p-3.5 space-y-5 overflow-y-auto`}
         >
-          {/* Main Views */}
           <div className="space-y-1">
             <div className="px-2 text-[10px] font-mono uppercase tracking-wider text-slate-500 font-bold mb-1.5">
               Navigation
@@ -1221,6 +1292,7 @@ export default function App() {
                 <button
                   key={item.id}
                   onClick={() => {
+                    if (item.id === 'match') setActiveMatchId('m-ars-bha');
                     setActivePage(item.id as ActivePage);
                     setMobileMenuOpen(false);
                   }}
@@ -1252,7 +1324,6 @@ export default function App() {
             })}
           </div>
 
-          {/* Followed Teams & Competitions */}
           <div className="space-y-1.5">
             <div className="px-2 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-slate-500 font-bold">
               <span>Followed ({followedItems.length})</span>
@@ -1268,7 +1339,7 @@ export default function App() {
                   <div
                     key={item}
                     onClick={() => {
-                      if (item === 'Arsenal' || item === 'Brighton') setActivePage('match');
+                      if (item === 'Arsenal' || item === 'Brighton') openMatchPage('m-ars-bha');
                       else setActivePage('football');
                       setMobileMenuOpen(false);
                     }}
@@ -1287,7 +1358,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Top Football Competitions */}
           <div className="space-y-1">
             <div className="px-2 text-[10px] font-mono uppercase tracking-wider text-slate-500 font-bold mb-1.5">
               Top Competitions
@@ -1308,7 +1378,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* All Sports Nav */}
           <div className="space-y-1">
             <div className="px-2 text-[10px] font-mono uppercase tracking-wider text-slate-500 font-bold mb-1.5">
               Sports A-Z
@@ -1334,16 +1403,12 @@ export default function App() {
           </div>
         </aside>
 
-        {/* COLUMN 2: CENTER MAIN VIEWPORT (Pages 1 to 4, plus Mobile Full Page 5) */}
+        {/* CENTER MAIN VIEWPORT */}
         <main className="flex-1 min-w-0 p-3.5 sm:p-5 pb-24 lg:pb-8 overflow-y-auto space-y-6">
-          {/* ==========================================
-              PAGE 1: SPORTS HOME (15 PTS)
-             ========================================== */}
           {activePage === 'home' && (
             <div className="space-y-6">
-              {/* Featured Live Match Spotlight Banner */}
               <div
-                onClick={() => setActivePage('match')}
+                onClick={() => openMatchPage('m-ars-bha')}
                 className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#172234] via-[#181F2C] to-[#121721] border border-[#2A364F] p-4 sm:p-5 cursor-pointer hover:border-[#00E701]/50 transition group"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1365,7 +1430,7 @@ export default function App() {
                       <span>Brighton</span>
                     </div>
                     <p className="text-xs text-slate-400">
-                      {INITIAL_MATCHES[0].goalSummary} • Tap to view all 32 live markets
+                      {INITIAL_MATCHES[0].goalSummary} • Tap to view all 6 live market groups
                     </p>
                   </div>
 
@@ -1377,13 +1442,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Sports Navigation Pills */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold">
-                    Sports Navigation
-                  </h2>
-                </div>
+                <h2 className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold">
+                  Sports Navigation
+                </h2>
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
                   {SPORTS_LIST.map((sp) => (
                     <button
@@ -1410,7 +1472,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Top Competitions Grid */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs font-mono uppercase tracking-wider text-slate-400 font-bold">
@@ -1458,7 +1519,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Live Now Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1474,21 +1534,15 @@ export default function App() {
                     All In-Play <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
-
-                <div className="space-y-2.5">
-                  {liveMatches.map((m) => renderMatchRow(m))}
-                </div>
+                <div className="space-y-2.5">{liveMatches.map((m) => renderMatchRow(m))}</div>
               </div>
 
-              {/* Starting Soon Section */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#00E701]" />
-                    <h2 className="text-sm font-extrabold uppercase tracking-wide text-white">
-                      Starting Soon
-                    </h2>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#00E701]" />
+                  <h2 className="text-sm font-extrabold uppercase tracking-wide text-white">
+                    Starting Soon
+                  </h2>
                 </div>
                 <div className="space-y-2.5">
                   {startingSoonMatches.map((m) => renderMatchRow(m))}
@@ -1497,9 +1551,6 @@ export default function App() {
             </div>
           )}
 
-          {/* ==========================================
-              PAGE 2: LIVE PAGE (10 PTS)
-             ========================================== */}
           {activePage === 'live' && (
             <div className="space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#222B3A] pb-4">
@@ -1513,7 +1564,6 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* Toggle Nothing Live Fallback directly on page too */}
                 <button
                   onClick={() => setForceNothingLive(!forceNothingLive)}
                   className="self-start sm:self-auto px-3 py-1.5 rounded-lg bg-[#181F2C] hover:bg-[#232D3F] border border-[#2E3A52] text-xs font-mono text-cyan-300 transition"
@@ -1522,7 +1572,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Filter by Sport and Competition */}
               <div className="flex flex-wrap items-center gap-2">
                 {SPORTS_LIST.map((sp) => (
                   <button
@@ -1568,11 +1617,8 @@ export default function App() {
                 ))}
               </div>
 
-              {/* Live Matches OR Required "Nothing Live: Show Starting Soon" Fallback */}
               {liveMatches.length > 0 ? (
-                <div className="space-y-2.5">
-                  {liveMatches.map((m) => renderMatchRow(m))}
-                </div>
+                <div className="space-y-2.5">{liveMatches.map((m) => renderMatchRow(m))}</div>
               ) : (
                 <div className="space-y-5">
                   <div className="bg-[#181F2C] border border-[#263042] rounded-2xl p-6 text-center space-y-2">
@@ -1581,8 +1627,9 @@ export default function App() {
                       Nothing live right now in this filter
                     </h3>
                     <p className="text-xs text-slate-400 max-w-md mx-auto">
-                      No matches are currently in play for your selected filter. Check out the fixtures{' '}
-                      <span className="text-[#00E701] font-semibold">Starting Soon</span> below.
+                      No matches are currently in play for your selected filter. Check out the
+                      fixtures <span className="text-[#00E701] font-semibold">Starting Soon</span>{' '}
+                      below.
                     </p>
                   </div>
 
@@ -1600,16 +1647,14 @@ export default function App() {
             </div>
           )}
 
-          {/* ==========================================
-              PAGE 3: FOOTBALL PAGE (10 PTS)
-             ========================================== */}
           {activePage === 'football' && (
             <div className="space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#222B3A] pb-4">
                 <div>
                   <h1 className="text-lg font-extrabold text-white">Football</h1>
                   <p className="text-xs text-slate-400">
-                    Premier League, Champions League, LaLiga, Serie A, Bundesliga • Follow teams & competitions
+                    Premier League, Champions League, LaLiga, Serie A, Bundesliga • Follow teams &
+                    competitions
                   </p>
                 </div>
 
@@ -1621,12 +1666,15 @@ export default function App() {
                       : 'bg-[#181F2C] text-slate-300 border-[#222B3A]'
                   }`}
                 >
-                  <Star className={`w-3.5 h-3.5 ${showFollowedOnly ? 'fill-[#0B0E14]' : 'text-amber-400'}`} />
+                  <Star
+                    className={`w-3.5 h-3.5 ${
+                      showFollowedOnly ? 'fill-[#0B0E14]' : 'text-amber-400'
+                    }`}
+                  />
                   <span>{showFollowedOnly ? 'Showing Followed Only' : 'Filter by Followed'}</span>
                 </button>
               </div>
 
-              {/* Competition Pills */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 <button
                   onClick={() => setSelectedCompetition('all')}
@@ -1653,7 +1701,6 @@ export default function App() {
                 ))}
               </div>
 
-              {/* Grouped by the 5 Required Leagues */}
               <div className="space-y-5">
                 {TOP_COMPETITIONS.filter(
                   (c) => selectedCompetition === 'all' || c.id === selectedCompetition
@@ -1671,12 +1718,10 @@ export default function App() {
                   });
 
                   if (leagueMatches.length === 0) return null;
-
                   const isLeagueFollowed = followedItems.includes(comp.name);
 
                   return (
                     <div key={comp.id} className="space-y-2.5">
-                      {/* Competition Header with Follow Toggle & 1X2 Column Labels */}
                       <div className="flex items-center justify-between bg-[#121721] px-3.5 py-2 rounded-xl border border-[#222B3A]">
                         <div className="flex items-center gap-2.5">
                           <span className="px-2 py-0.5 rounded bg-[#181F2C] text-[#00E701] font-mono text-[10px] font-bold">
@@ -1716,12 +1761,9 @@ export default function App() {
             </div>
           )}
 
-          {/* ==========================================
-              PAGE 4: MATCH PAGE — ARSENAL v BRIGHTON, LIVE (20 PTS — PRIMARY TIEBREAKER)
-             ========================================== */}
+          {/* PAGE 4: MATCH PAGE (20 PTS — PRIMARY TIEBREAKER) */}
           {activePage === 'match' && (
             <div className="space-y-5">
-              {/* Breadcrumb */}
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <div className="flex items-center gap-1.5">
                   <button onClick={() => setActivePage('home')} className="hover:text-white">
@@ -1729,94 +1771,121 @@ export default function App() {
                   </button>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
                   <button onClick={() => setActivePage('football')} className="hover:text-white">
-                    Premier League
+                    {currentMatch.competitionName}
                   </button>
                   <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
-                  <span className="text-white font-semibold">Arsenal v Brighton</span>
+                  <span className="text-white font-semibold">
+                    {currentMatch.homeTeam} v {currentMatch.awayTeam}
+                  </span>
                 </div>
-                <span className="font-mono text-[11px] text-[#00E701]">Single Match View</span>
+                {currentMatch.id !== 'm-ars-bha' && (
+                  <button
+                    onClick={() => setActiveMatchId('m-ars-bha')}
+                    className="font-mono text-[11px] text-[#00E701] hover:underline"
+                  >
+                    Switch to Arsenal v Brighton
+                  </button>
+                )}
               </div>
 
-              {/* Live Broadcast Scoreboard Card (Strictly NO external stats widgets/pitch trackers) */}
               <div className="rounded-2xl bg-gradient-to-b from-[#1A2333] to-[#121721] border border-[#2A364F] p-4 sm:p-6 shadow-xl">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-400 font-mono text-xs font-bold">
-                    <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                    LIVE • {formattedArsenalClock}
-                  </span>
+                  {currentMatch.isLive ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-400 font-mono text-xs font-bold">
+                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+                      LIVE •{' '}
+                      {currentMatch.id === 'm-ars-bha'
+                        ? formattedArsenalClock
+                        : `${currentMatch.minute}'`}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#232D3F] text-[#00E701] font-mono text-xs font-bold">
+                      {currentMatch.kickoff}
+                    </span>
+                  )}
                   <span className="text-xs font-mono uppercase tracking-wider text-slate-400">
-                    Premier League • 2nd Half
+                    {currentMatch.competitionName} • {currentMatch.period || 'Upcoming'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-3 items-center gap-2 sm:gap-6 py-2">
-                  {/* Arsenal */}
                   <div className="flex flex-col sm:flex-row items-center sm:justify-end gap-2.5 text-center sm:text-right">
                     <div>
                       <div className="flex items-center justify-center sm:justify-end gap-1.5">
                         <button
-                          onClick={(e) => toggleFollow('Arsenal', e)}
+                          onClick={(e) => toggleFollow(currentMatch.homeTeam, e)}
                           className="text-slate-400 hover:text-amber-400"
                         >
                           <Star
                             className={`w-4 h-4 ${
-                              followedItems.includes('Arsenal')
+                              followedItems.includes(currentMatch.homeTeam)
                                 ? 'fill-amber-400 text-amber-400'
                                 : ''
                             }`}
                           />
                         </button>
                         <span className="text-base sm:text-xl font-extrabold text-white">
-                          Arsenal
+                          {currentMatch.homeTeam}
                         </span>
                       </div>
-                      <span className="text-[11px] text-slate-400 hidden sm:block">
-                        Saka 14', Havertz 52'
-                      </span>
+                      {currentMatch.id === 'm-ars-bha' && (
+                        <span className="text-[11px] text-slate-400 hidden sm:block">
+                          Saka 14', Havertz 52'
+                        </span>
+                      )}
                     </div>
-                    <TeamCrest name="Arsenal" colors={['#EF0107', '#FFFFFF']} size="lg" />
+                    <TeamCrest
+                      name={currentMatch.homeTeam}
+                      colors={currentMatch.homeColors}
+                      size="lg"
+                    />
                   </div>
 
-                  {/* Center Score */}
                   <div className="flex flex-col items-center justify-center">
                     <div className="flex items-center gap-2 sm:gap-3 font-mono text-2xl sm:text-4xl font-black text-white bg-[#0B0E14] px-4 sm:px-6 py-2 rounded-2xl border border-[#2E3A52] tabular-nums shadow-inner">
-                      <span>2</span>
+                      <span>{currentMatch.isLive ? currentMatch.homeScore : '-'}</span>
                       <span className="text-[#00E701] text-xl">:</span>
-                      <span>1</span>
+                      <span>{currentMatch.isLive ? currentMatch.awayScore : '-'}</span>
                     </div>
-                    <span className="text-[11px] text-slate-400 mt-1.5 font-mono">HT: 1 - 1</span>
+                    <span className="text-[11px] text-slate-400 mt-1.5 font-mono">
+                      {currentMatch.isLive ? 'In-Play' : 'Pre-Match'}
+                    </span>
                   </div>
 
-                  {/* Brighton */}
                   <div className="flex flex-col-reverse sm:flex-row items-center sm:justify-start gap-2.5 text-center sm:text-left">
-                    <TeamCrest name="Brighton" colors={['#0057B8', '#FFCD00']} size="lg" />
+                    <TeamCrest
+                      name={currentMatch.awayTeam}
+                      colors={currentMatch.awayColors}
+                      size="lg"
+                    />
                     <div>
                       <div className="flex items-center justify-center sm:justify-start gap-1.5">
                         <span className="text-base sm:text-xl font-extrabold text-white">
-                          Brighton
+                          {currentMatch.awayTeam}
                         </span>
                         <button
-                          onClick={(e) => toggleFollow('Brighton', e)}
+                          onClick={(e) => toggleFollow(currentMatch.awayTeam, e)}
                           className="text-slate-400 hover:text-amber-400"
                         >
                           <Star
                             className={`w-4 h-4 ${
-                              followedItems.includes('Brighton')
+                              followedItems.includes(currentMatch.awayTeam)
                                 ? 'fill-amber-400 text-amber-400'
                                 : ''
                             }`}
                           />
                         </button>
                       </div>
-                      <span className="text-[11px] text-slate-400 hidden sm:block">
-                        Joao Pedro 39' (Pen)
-                      </span>
+                      {currentMatch.id === 'm-ars-bha' && (
+                        <span className="text-[11px] text-slate-400 hidden sm:block">
+                          Joao Pedro 39' (Pen)
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Sticky Market Group Filter Bar (All 6 Required Categories) */}
               <div className="sticky top-16 z-20 bg-[#0B0E14]/95 backdrop-blur py-2 border-b border-[#222B3A] flex items-center gap-1.5 overflow-x-auto">
                 {[
                   'All Markets',
@@ -1841,52 +1910,58 @@ export default function App() {
                 ))}
               </div>
 
-              {/* Market Accordions List */}
               <div className="space-y-3.5">
-                {matchMarkets
-                  .filter(
-                    (m) => matchMarketTab === 'All Markets' || m.category === matchMarketTab
-                  )
-                  .map((market) => (
-                    <div
-                      key={market.id}
-                      className="bg-[#181F2C] border border-[#222B3A] rounded-xl overflow-hidden"
-                    >
-                      <div className="px-4 py-3 bg-[#141A25] border-b border-[#222B3A] flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs sm:text-sm font-bold text-white">
-                            {market.title}
-                          </span>
-                          <span className="px-2 py-0.5 rounded bg-[#1F293A] text-slate-400 font-mono text-[10px]">
-                            {market.category}
-                          </span>
-                          {market.suspended && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 font-mono text-[10px] font-bold uppercase">
-                              <Lock className="w-3 h-3" /> Market Suspended
-                            </span>
-                          )}
-                        </div>
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
-                      </div>
-
+                {displayedMatchMarkets
+                  .filter((m) => matchMarketTab === 'All Markets' || m.category === matchMarketTab)
+                  .map((market) => {
+                    const isCollapsed = collapsedMarkets.includes(market.id);
+                    return (
                       <div
-                        className={`p-3.5 grid gap-2.5 ${
-                          market.columns === 3
-                            ? 'grid-cols-1 sm:grid-cols-3'
-                            : 'grid-cols-1 sm:grid-cols-2'
-                        }`}
+                        key={market.id}
+                        className="bg-[#181F2C] border border-[#222B3A] rounded-xl overflow-hidden"
                       >
-                        {market.options.map((opt) => renderOddButton(opt))}
+                        <div
+                          onClick={() => toggleMarketCollapse(market.id)}
+                          className="px-4 py-3 bg-[#141A25] hover:bg-[#192130] border-b border-[#222B3A] flex items-center justify-between cursor-pointer select-none transition"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs sm:text-sm font-bold text-white">
+                              {market.title}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-[#1F293A] text-slate-400 font-mono text-[10px]">
+                              {market.category}
+                            </span>
+                            {market.suspended && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 font-mono text-[10px] font-bold uppercase">
+                                <Lock className="w-3 h-3" /> Market Suspended
+                              </span>
+                            )}
+                          </div>
+                          <ChevronDown
+                            className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                              isCollapsed ? '-rotate-90' : 'rotate-0'
+                            }`}
+                          />
+                        </div>
+
+                        {!isCollapsed && (
+                          <div
+                            className={`p-3.5 grid gap-2.5 ${
+                              market.columns === 3
+                                ? 'grid-cols-1 sm:grid-cols-3'
+                                : 'grid-cols-1 sm:grid-cols-2'
+                            }`}
+                          >
+                            {market.options.map((opt) => renderOddButton(opt))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
           )}
 
-          {/* ==========================================
-              MOBILE FULL-PAGE VIEW FOR PAGE 5 (Bet Slip + My Bets)
-             ========================================== */}
           {activePage === 'betslip-mobile' && (
             <div className="rounded-2xl border border-[#222B3A] overflow-hidden min-h-[540px]">
               {renderUnifiedBetSlipAndMyBets()}
@@ -1894,17 +1969,13 @@ export default function App() {
           )}
         </main>
 
-        {/* COLUMN 3: RIGHT SIDE PANEL (1440px Desktop Unified Bet Slip + My Bets) */}
         <aside className="hidden lg:block w-[350px] xl:w-[360px] shrink-0 border-l border-[#222B3A] bg-[#121721] sticky top-16 h-[calc(100vh-4rem)]">
           {renderUnifiedBetSlipAndMyBets()}
         </aside>
       </div>
 
-      {/* ==========================================
-          MOBILE 390px STICKY BOTTOM BET SLIP BAR + DRAWER
-         ========================================== */}
+      {/* MOBILE 390px STICKY BOTTOM BET SLIP BAR + DRAWER */}
       <div className="lg:hidden fixed bottom-0 inset-x-0 z-40">
-        {/* Slide-up Drawer Overlay when expanded */}
         {mobileSlipOpen && (
           <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-40 flex flex-col justify-end">
             <div className="bg-[#121721] border-t border-[#2E3A52] rounded-t-2xl h-[82vh] flex flex-col overflow-hidden shadow-2xl">
@@ -1919,14 +1990,11 @@ export default function App() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto">
-                {renderUnifiedBetSlipAndMyBets()}
-              </div>
+              <div className="flex-1 overflow-y-auto">{renderUnifiedBetSlipAndMyBets()}</div>
             </div>
           </div>
         )}
 
-        {/* Persistent Sticky Bottom Bar at 390px */}
         <div
           onClick={() => setMobileSlipOpen(!mobileSlipOpen)}
           className="bg-[#121721]/95 backdrop-blur-md border-t-2 border-[#00E701] px-4 py-3 flex items-center justify-between cursor-pointer shadow-[0_-8px_25px_rgba(0,0,0,0.6)]"
@@ -1940,7 +2008,9 @@ export default function App() {
                 <>
                   <div className="text-xs font-bold text-white truncate">
                     {selectedOdd.label}{' '}
-                    <span className="font-mono text-[#00E701]">@{selectedOdd.odds.toFixed(2)}</span>
+                    <span className="font-mono text-[#00E701]">
+                      @{selectedOdd.odds.toFixed(2)}
+                    </span>
                   </div>
                   <div className="text-[10px] text-slate-400 truncate">
                     {selectedOdd.marketName} • Stake: {stake || 0} USDT
